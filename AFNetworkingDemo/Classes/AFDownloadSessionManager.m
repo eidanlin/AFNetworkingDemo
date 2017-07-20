@@ -218,7 +218,6 @@ CGFloat const AFDownloadSessionManagerDelayTimeToNotifyDelegateWhenReLaunchApp =
                 void (^handler)() = XAppDelegate.backgroundURLSessionCompletionHandler;
                 XAppDelegate.backgroundURLSessionCompletionHandler = nil;
                 handler();
-//                NSLog(@"FinishEventsForBackground");
             }
         });
     }];
