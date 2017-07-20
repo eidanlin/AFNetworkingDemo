@@ -242,6 +242,8 @@ CGFloat const AFDownloadSessionManagerDelayTimeToNotifyDelegateWhenReLaunchApp =
         [self startDownloadAllTasksThatInDownloadingObjsDicButNoInSession];
     }
     
+    //这里调用可有，可无，只是为了保险
+    [self checkResumeDatasDicAccordingDownloadingObjsDic];
 }
 
 - (AFDownloadBaseObj *)startDownloadTaskWithDownloadUrl:(NSString *)downloadUrl relativeSandboxLocalPath:(NSString *)relativeSandboxLocalPath {
@@ -276,10 +278,9 @@ CGFloat const AFDownloadSessionManagerDelayTimeToNotifyDelegateWhenReLaunchApp =
             obj.downloadTaskIdentifier = downloadTask.taskIdentifier;
             [downloadTask resume];
             
-            //更新一下 obj.downloadTaskIdentifier 到本地
-            dispatch_async(self.downloadingObjsQueue, ^{
-                [self updateObj:self.downloadingObjsDic forKey:AFDownloadSessionManagerDownloadingObjsDicLocalKey];
-            });
+             //更新一下 obj.downloadTaskIdentifier 到本地
+            [self updateObj:self.downloadingObjsDic forKey:AFDownloadSessionManagerDownloadingObjsDicLocalKey];
+            
         } else {
             //如果下载到一半，没有暂停，直接划掉App，就会出现有obj，没有resumeData
             //但用户和我们都有这个identifier，我们就要从新开始，就要把用户这个identifier替换掉我们刚刚自生成的，这样回调出去后，用户才能唯一确定是哪个identifier正在下载
@@ -370,18 +371,12 @@ CGFloat const AFDownloadSessionManagerDelayTimeToNotifyDelegateWhenReLaunchApp =
     NSURLRequest *request = [NSURLRequest requestWithURL:URL];
     
     NSURLSessionDownloadTask *downloadTask = [self.sessionManager downloadTaskWithRequest:request progress:nil destination:nil completionHandler:nil];
-//    NSLog(@"taskIdentifier %lu",(unsigned long)downloadTask.taskIdentifier);
     obj.downloadTaskIdentifier = downloadTask.taskIdentifier;
     downloadTask.downloadObj = obj;
     [downloadTask resume];
     
     [self.downloadingObjsDic setObject:obj forKey:obj.identifierInternal];
-    
-    dispatch_async(self.downloadingObjsQueue, ^{
-        NSDate *start = [NSDate date];
-        [self updateObj:self.downloadingObjsDic forKey:AFDownloadSessionManagerDownloadingObjsDicLocalKey];
-        NSLog(@"time %ld,%f",obj.downloadTaskIdentifier,[[NSDate date] timeIntervalSinceDate:start]);
-    });
+    [self updateObj:self.downloadingObjsDic forKey:AFDownloadSessionManagerDownloadingObjsDicLocalKey];  //这个地方的存储不放在子线程，因为iPhone4s，500个存储所花的时间也才不到0.1s。
     
     return obj;
 }
@@ -391,7 +386,7 @@ CGFloat const AFDownloadSessionManagerDelayTimeToNotifyDelegateWhenReLaunchApp =
     AFDownloadBaseObj *obj = [self.downloadingObjsDic objectForKey:identifier];  // identifier为nil也可以
     
     if (!obj) {
-        NSError *error = [self errorWithErrorCode:AFDownloadSessionErrorCannotFindTask info:@"找不到指定的下载任务"];
+        NSError *error = [self errorWithErrorCode:AFDownloadSessionErrorCannotFindTask info:@"下载队列中找不到指定的任务"];
         if (isNeed) {  //代表暂停,找不到要暂停的文件
             [self notifyDelegateWhenPauseComplete:identifier error:error];
         } else {  //代表取消,找不到要取消的文件
@@ -473,7 +468,7 @@ CGFloat const AFDownloadSessionManagerDelayTimeToNotifyDelegateWhenReLaunchApp =
                     [self updateObj:self.resumeDatasDic forKey:AFDownloadSessionManagerResumeDatasDicLocalKey];
                 });
                 
-                //存一下百分比，百分比只需这里存，因为只有正确的resumeData，百分比才有意义
+                //存一下百分比，百分比只需这里存，因为只有正确的resumeData，百分比才有意义，所以两者都在子线程
                 //比如下载到50%，应用划掉，resumeData没有成功保存，下次还是要从头开始下载，你在别的地方保存了50%，也是一个错误的值，所以只有在这里存储百分比
                 dispatch_async(self.downloadingObjsQueue, ^{
                     [self updateObj:self.downloadingObjsDic forKey:AFDownloadSessionManagerDownloadingObjsDicLocalKey];
@@ -499,7 +494,7 @@ CGFloat const AFDownloadSessionManagerDelayTimeToNotifyDelegateWhenReLaunchApp =
         } else {
             
             task.downloadObj.totalBytesWrittenInternal = 0;
-            NSError *aError = [NSError errorWithDomain:AFDownloadSessionErrorDomain code:ADDownloadSessionErrorNSURLError userInfo:@{@"NSURLErrorBrief":[NSString stringWithFormat:@"domain:%@ ,code:%ld",error.domain,(long)error.code],@"NSURLErrorInfo":error.userInfo}];
+            NSError *aError = [NSError errorWithDomain:AFDownloadSessionErrorDomain code:ADDownloadSessionErrorNSURLError userInfo:@{@"NSURLErrorDomain":[NSString stringWithFormat:@"%@",error.domain],@"NSURLErrorCode":@(error.code),@"NSURLErrorInfo":error.userInfo}];
             
             [self handleDownloadingObjsDicWhenDownloadCompleteWithObj:task.downloadObj];
             [self handleResumeDatasDicWhenDownloadCompleteWithObj:task.downloadObj];
@@ -573,7 +568,7 @@ CGFloat const AFDownloadSessionManagerDelayTimeToNotifyDelegateWhenReLaunchApp =
 - (void)handleResumeDatasDicWhenDownloadCompleteWithObj:(AFDownloadBaseObj *)obj {
     if ([self.resumeDatasDic objectForKey:obj.identifierInternal]) {
         [self.resumeDatasDic removeObjectForKey:obj.identifierInternal];
-        dispatch_async(self.resumeDataQueue, ^{
+        dispatch_async(self.resumeDataQueue, ^{ //不卡线程
             [self updateObj:self.resumeDatasDic forKey:AFDownloadSessionManagerResumeDatasDicLocalKey];
         });
     }
@@ -582,10 +577,30 @@ CGFloat const AFDownloadSessionManagerDelayTimeToNotifyDelegateWhenReLaunchApp =
 - (void)handleDownloadingObjsDicWhenDownloadCompleteWithObj:(AFDownloadBaseObj *)obj {
     if ([self.downloadingObjsDic objectForKey:obj.identifierInternal]) {
         [self.downloadingObjsDic removeObjectForKey:obj.identifierInternal];
-        dispatch_async(self.downloadingObjsQueue, ^{
-            [self updateObj:self.downloadingObjsDic forKey:AFDownloadSessionManagerDownloadingObjsDicLocalKey];
-        });
+        [self updateObj:self.downloadingObjsDic forKey:AFDownloadSessionManagerDownloadingObjsDicLocalKey];  //卡住，防止数据错误
     }
+    
+    [self checkResumeDatasDicAccordingDownloadingObjsDic];
+}
+
+//如果一个identifier在downloadingObjsDic里没有，但在resumeDatasDic有，应该移除，这种情况可能很少。
+- (void)checkResumeDatasDicAccordingDownloadingObjsDic {
+    dispatch_async(self.resumeDataQueue, ^{ //不卡线程
+        
+        NSMutableArray *needRemoveKeys = [NSMutableArray array];
+        
+        for (NSString *key in self.resumeDatasDic.allKeys) {
+            if ([self.downloadingObjsDic objectForKey:key] == nil) {
+                [needRemoveKeys addObject:key];
+            }
+        }
+        
+        if (needRemoveKeys.count) {
+            [self.resumeDatasDic removeObjectsForKeys:needRemoveKeys];
+            [self updateObj:self.resumeDatasDic forKey:AFDownloadSessionManagerResumeDatasDicLocalKey];
+        }
+        
+    });
 }
 
 //获得完成文件的大小

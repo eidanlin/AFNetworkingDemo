@@ -44,7 +44,7 @@
     self.myObj = [self.downloadManager startDownloadTaskWithDownloadUrl:downloadUrl relativeSandboxLocalPath:relativeSandboxLocalPath];
 //    NSLog(@"start %d",self.index);
     
-    if (self.index < 500) {
+    if (self.index < 20) {
         [self performSelector:@selector(startDownload) withObject:nil afterDelay:0.01];
     }
 }
@@ -83,11 +83,11 @@
     } else {
         NSLog(@"!!! download success %@,%@",obj.identifier,obj.absoluteSandboxLocalPath.path);
         self.successIndex++;
-//        if (self.successIndex >= 2) {  //下载完成3个，手动造成Crash
-//            NSArray *array = @[];
-//            NSString *strring = [array objectAtIndex:3];
-//            NSLog(@"%@",strring);
-//        }
+        if (self.successIndex >= 2) {  //下载完成3个，手动造成Crash
+            NSArray *array = @[];
+            NSString *strring = [array objectAtIndex:3];
+            NSLog(@"%@",strring);
+        }
     }
 }
 

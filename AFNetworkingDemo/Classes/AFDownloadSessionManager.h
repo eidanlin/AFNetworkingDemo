@@ -118,9 +118,7 @@ typedef NS_ENUM(NSInteger, AFDownloadSessionErrorCode) {
 
 /*
   已知bug：
-  1. 如果用户同时添加多个任务，虽然任务都已经添加进入队列，但还没来得及本地化就Crash了，那么如果是前台下载，就会丢失没有本地化的任务，如果是后台下载，虽然会继续下载，但二次启动后，不应该通知给谁，也是任务丢失。
-  2. 下载的过程中，AFDownloadSessionManager 通过delegate给开发者发通知，开发者在这些回调函数中处理的时候Crash了，内部还没来得及将数据归位和本地化，下次启动后，可能会出现已经成功的任务，重新开始下载。
-  总之，开发者在使用的过程中，不能Crash。
+  1. 后台下载，Crash2次及以上，第三次启动，剩余任务可能会全部失败，报错：domain:NSPOSIXErrorDomain, code:2,
  */
 
 
