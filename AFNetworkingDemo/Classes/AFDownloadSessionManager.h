@@ -62,6 +62,7 @@ typedef NS_ENUM(NSInteger, AFDownloadSessionErrorCode) {
  */
 - (void)cancelDownloadTaskWithIdentifier:(NSString *)identifier;
 
+
 /**
  * @brief 判断某个任务是否正在下载，开发者如果想判断某个任务是否已下载完成，可以再返回NO的前提下，判断“下载完成后的本地存储地址”是否有文件存在
  * @param identifier 请传入合法的AFDownloadBaseObj的identifier
